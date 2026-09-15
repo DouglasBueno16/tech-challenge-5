@@ -1846,7 +1846,702 @@ grafana:
               "variables": []
             }
           }
-  additionalDataSources:
+      SRE-Latencia:
+        json: |-
+          {
+            "apiVersion": "dashboard.grafana.app/v2",
+            "kind": "Dashboard",
+            "metadata": {
+              "name": "donation-latency-slo-teste",
+              "namespace": "default",
+              "uid": "1cb34750-cac1-446b-a6e4-a2fe94620820",
+              "resourceVersion": "1789500564340004",
+              "generation": 6,
+              "creationTimestamp": "2026-09-15T18:48:58Z",
+              "labels": {
+                "grafana.app/deprecatedInternalID": "1256085269979136"
+              },
+              "annotations": {
+                "grafana.app/createdBy": "user:bfycob2m4ofeof",
+                "grafana.app/saved-from-ui": "Grafana v13.2.1 (56cd3e9288)",
+                "grafana.app/updatedBy": "user:bfycob2m4ofeof",
+                "grafana.app/updatedTimestamp": "2026-09-15T19:29:24Z"
+              }
+            },
+            "spec": {
+              "annotations": [
+                {
+                  "kind": "AnnotationQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "-- Grafana --"
+                      },
+                      "spec": {}
+                    },
+                    "enable": true,
+                    "hide": true,
+                    "iconColor": "rgba(0, 211, 255, 1)",
+                    "name": "Annotations & Alerts",
+                    "builtIn": true
+                  }
+                }
+              ],
+              "cursorSync": "Off",
+              "editable": true,
+              "elements": {
+                "panel-1": {
+                  "kind": "Panel",
+                  "spec": {
+                    "id": 1,
+                    "title": "P95 de latência — POST /donations",
+                    "description": "Linha vermelha nos 800ms = limiar do SLO.",
+                    "links": [],
+                    "data": {
+                      "kind": "QueryGroup",
+                      "spec": {
+                        "queries": [
+                          {
+                            "kind": "PanelQuery",
+                            "spec": {
+                              "query": {
+                                "kind": "DataQuery",
+                                "group": "",
+                                "version": "v0",
+                                "spec": {
+                                  "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{service=\"donation-service\",handler=\"donations\",method=\"POST\"}[5m])) by (le))",
+                                  "legendFormat": "P95 (5m)"
+                                }
+                              },
+                              "refId": "A",
+                              "hidden": false
+                            }
+                          }
+                        ],
+                        "transformations": [],
+                        "queryOptions": {}
+                      }
+                    },
+                    "vizConfig": {
+                      "kind": "VizConfig",
+                      "group": "timeseries",
+                      "version": "13.2.1",
+                      "spec": {
+                        "options": {
+                          "legend": {
+                            "calcs": [],
+                            "displayMode": "list",
+                            "placement": "bottom",
+                            "showLegend": true
+                          },
+                          "tooltip": {
+                            "hideZeros": false,
+                            "mode": "single",
+                            "sort": "none"
+                          }
+                        },
+                        "fieldConfig": {
+                          "defaults": {
+                            "unit": "s",
+                            "thresholds": {
+                              "mode": "absolute",
+                              "steps": [
+                                {
+                                  "value": 0,
+                                  "color": "green"
+                                },
+                                {
+                                  "value": 0.8,
+                                  "color": "red"
+                                }
+                              ]
+                            },
+                            "color": {
+                              "mode": "palette-classic"
+                            },
+                            "custom": {
+                              "axisBorderShow": false,
+                              "axisCenteredZero": false,
+                              "axisColorMode": "text",
+                              "axisLabel": "",
+                              "axisPlacement": "auto",
+                              "barAlignment": 0,
+                              "barWidthFactor": 0.6,
+                              "drawStyle": "line",
+                              "fillOpacity": 10,
+                              "gradientMode": "none",
+                              "hideFrom": {
+                                "legend": false,
+                                "tooltip": false,
+                                "viz": false
+                              },
+                              "insertNulls": false,
+                              "lineInterpolation": "linear",
+                              "lineWidth": 1,
+                              "pointSize": 5,
+                              "scaleDistribution": {
+                                "type": "linear"
+                              },
+                              "showPoints": "auto",
+                              "showValues": false,
+                              "spanNulls": false,
+                              "stacking": {
+                                "group": "A",
+                                "mode": "none"
+                              },
+                              "thresholdsStyle": {
+                                "mode": "line"
+                              }
+                            }
+                          },
+                          "overrides": []
+                        }
+                      }
+                    }
+                  }
+                },
+                "panel-2": {
+                  "kind": "Panel",
+                  "spec": {
+                    "id": 2,
+                    "title": "SLI atual — % de requisições < 800ms (5m, interpolado)",
+                    "description": "Sem bucket exato em 0.8s, valor estimado por interpolação linear entre os buckets 0.5 e 1.0.",
+                    "links": [],
+                    "data": {
+                      "kind": "QueryGroup",
+                      "spec": {
+                        "queries": [
+                          {
+                            "kind": "PanelQuery",
+                            "spec": {
+                              "query": {
+                                "kind": "DataQuery",
+                                "group": "",
+                                "version": "v0",
+                                "spec": {
+                                  "editorMode": "code",
+                                  "expr": "(\n  sum(rate(http_request_duration_seconds_bucket{service=\"donation-service\",handler=\"donations\",method=\"POST\",le=\"0.5\"}[5m]))\n  +\n  (\n    sum(rate(http_request_duration_seconds_bucket{service=\"donation-service\",handler=\"donations\",method=\"POST\",le=\"1.0\"}[5m]))\n    -\n    sum(rate(http_request_duration_seconds_bucket{service=\"donation-service\",handler=\"donations\",method=\"POST\",le=\"0.5\"}[5m]))\n  ) * 0.6\n)\n/\nsum(rate(http_request_duration_seconds_count{service=\"donation-service\",handler=\"donations\",method=\"POST\"}[5m]))",
+                                  "legendFormat": "SLI (5m)",
+                                  "range": true
+                                }
+                              },
+                              "refId": "A",
+                              "hidden": false
+                            }
+                          }
+                        ],
+                        "transformations": [],
+                        "queryOptions": {}
+                      }
+                    },
+                    "vizConfig": {
+                      "kind": "VizConfig",
+                      "group": "gauge",
+                      "version": "13.2.1",
+                      "spec": {
+                        "options": {
+                          "barShape": "flat",
+                          "barWidthFactor": 0.5,
+                          "effects": {
+                            "barGlow": false,
+                            "centerGlow": false,
+                            "gradient": false
+                          },
+                          "endpointMarker": "point",
+                          "minVizHeight": 75,
+                          "minVizWidth": 75,
+                          "orientation": "auto",
+                          "reduceOptions": {
+                            "calcs": [
+                              "lastNotNull"
+                            ],
+                            "fields": "",
+                            "values": false
+                          },
+                          "segmentCount": 1,
+                          "segmentSpacing": 0.3,
+                          "shape": "gauge",
+                          "showThresholdLabels": false,
+                          "showThresholdMarkers": true,
+                          "sizing": "auto",
+                          "sparkline": false,
+                          "textMode": "auto"
+                        },
+                        "fieldConfig": {
+                          "defaults": {
+                            "unit": "percentunit",
+                            "min": 0,
+                            "max": 1,
+                            "thresholds": {
+                              "mode": "absolute",
+                              "steps": [
+                                {
+                                  "value": 0,
+                                  "color": "red"
+                                },
+                                {
+                                  "value": 0.9,
+                                  "color": "yellow"
+                                },
+                                {
+                                  "value": 0.95,
+                                  "color": "green"
+                                }
+                              ]
+                            }
+                          },
+                          "overrides": []
+                        }
+                      }
+                    }
+                  }
+                },
+                "panel-3": {
+                  "kind": "Panel",
+                  "spec": {
+                    "id": 3,
+                    "title": "SLO alvo: 95%",
+                    "description": "",
+                    "links": [],
+                    "data": {
+                      "kind": "QueryGroup",
+                      "spec": {
+                        "queries": [
+                          {
+                            "kind": "PanelQuery",
+                            "spec": {
+                              "query": {
+                                "kind": "DataQuery",
+                                "group": "",
+                                "version": "v0",
+                                "spec": {
+                                  "expr": "95"
+                                }
+                              },
+                              "refId": "A",
+                              "hidden": false
+                            }
+                          }
+                        ],
+                        "transformations": [],
+                        "queryOptions": {}
+                      }
+                    },
+                    "vizConfig": {
+                      "kind": "VizConfig",
+                      "group": "stat",
+                      "version": "13.2.1",
+                      "spec": {
+                        "options": {
+                          "colorMode": "value",
+                          "graphMode": "area",
+                          "justifyMode": "auto",
+                          "orientation": "auto",
+                          "percentChangeColorMode": "standard",
+                          "reduceOptions": {
+                            "calcs": [
+                              "lastNotNull"
+                            ],
+                            "fields": "",
+                            "values": false
+                          },
+                          "showPercentChange": false,
+                          "textMode": "auto",
+                          "wideLayout": true
+                        },
+                        "fieldConfig": {
+                          "defaults": {
+                            "unit": "percent",
+                            "min": 0,
+                            "max": 100,
+                            "thresholds": {
+                              "mode": "absolute",
+                              "steps": [
+                                {
+                                  "value": 0,
+                                  "color": "green"
+                                },
+                                {
+                                  "value": 80,
+                                  "color": "red"
+                                }
+                              ]
+                            }
+                          },
+                          "overrides": []
+                        }
+                      }
+                    }
+                  }
+                },
+                "panel-4": {
+                  "kind": "Panel",
+                  "spec": {
+                    "id": 4,
+                    "title": "Burn rate (janela 5m)",
+                    "description": "Burn rate = (1 - SLI) / (1 - objetivo 0.95). Acima de 1x já está consumindo o error budget mais rápido que o previsto; acima de 14.4x é crítico.",
+                    "links": [],
+                    "data": {
+                      "kind": "QueryGroup",
+                      "spec": {
+                        "queries": [
+                          {
+                            "kind": "PanelQuery",
+                            "spec": {
+                              "query": {
+                                "kind": "DataQuery",
+                                "group": "prometheus",
+                                "version": "v0",
+                                "datasource": {
+                                  "name": "prometheus"
+                                },
+                                "spec": {
+                                  "editorMode": "code",
+                                  "expr": "(1 - (\n  (\n    sum(rate(http_request_duration_seconds_bucket{service=\"donation-service\",handler=\"donations\",method=\"POST\",le=\"0.5\"}[5m]))\n    +\n    (\n      sum(rate(http_request_duration_seconds_bucket{service=\"donation-service\",handler=\"donations\",method=\"POST\",le=\"1.0\"}[5m]))\n      -\n      sum(rate(http_request_duration_seconds_bucket{service=\"donation-service\",handler=\"donations\",method=\"POST\",le=\"0.5\"}[5m]))\n    ) * 0.6\n  )\n  /\n  sum(rate(http_request_duration_seconds_count{service=\"donation-service\",handler=\"donations\",method=\"POST\"}[5m]))\n)) / 0.05",
+                                  "legendFormat": "burn rate (5m)",
+                                  "range": true
+                                }
+                              },
+                              "refId": "A",
+                              "hidden": false
+                            }
+                          },
+                          {
+                            "kind": "PanelQuery",
+                            "spec": {
+                              "query": {
+                                "kind": "DataQuery",
+                                "group": "prometheus",
+                                "version": "v0",
+                                "datasource": {
+                                  "name": "prometheus"
+                                },
+                                "spec": {
+                                  "expr": "1",
+                                  "legendFormat": "limiar normal (1x)"
+                                }
+                              },
+                              "refId": "B",
+                              "hidden": false
+                            }
+                          },
+                          {
+                            "kind": "PanelQuery",
+                            "spec": {
+                              "query": {
+                                "kind": "DataQuery",
+                                "group": "prometheus",
+                                "version": "v0",
+                                "datasource": {
+                                  "name": "prometheus"
+                                },
+                                "spec": {
+                                  "expr": "14.4",
+                                  "legendFormat": "limiar crítico (14.4x)"
+                                }
+                              },
+                              "refId": "C",
+                              "hidden": false
+                            }
+                          }
+                        ],
+                        "transformations": [],
+                        "queryOptions": {}
+                      }
+                    },
+                    "vizConfig": {
+                      "kind": "VizConfig",
+                      "group": "timeseries",
+                      "version": "13.2.1",
+                      "spec": {
+                        "options": {
+                          "legend": {
+                            "calcs": [],
+                            "displayMode": "list",
+                            "placement": "bottom",
+                            "showLegend": true
+                          },
+                          "tooltip": {
+                            "hideZeros": false,
+                            "mode": "single",
+                            "sort": "none"
+                          }
+                        },
+                        "fieldConfig": {
+                          "defaults": {
+                            "unit": "none",
+                            "thresholds": {
+                              "mode": "absolute",
+                              "steps": [
+                                {
+                                  "value": 0,
+                                  "color": "green"
+                                },
+                                {
+                                  "value": 80,
+                                  "color": "red"
+                                }
+                              ]
+                            },
+                            "color": {
+                              "mode": "palette-classic"
+                            },
+                            "custom": {
+                              "axisBorderShow": false,
+                              "axisCenteredZero": false,
+                              "axisColorMode": "text",
+                              "axisLabel": "",
+                              "axisPlacement": "auto",
+                              "barAlignment": 0,
+                              "barWidthFactor": 0.6,
+                              "drawStyle": "line",
+                              "fillOpacity": 0,
+                              "gradientMode": "none",
+                              "hideFrom": {
+                                "legend": false,
+                                "tooltip": false,
+                                "viz": false
+                              },
+                              "insertNulls": false,
+                              "lineInterpolation": "linear",
+                              "lineWidth": 1,
+                              "pointSize": 5,
+                              "scaleDistribution": {
+                                "type": "linear"
+                              },
+                              "showPoints": "auto",
+                              "showValues": false,
+                              "spanNulls": false,
+                              "stacking": {
+                                "group": "A",
+                                "mode": "none"
+                              },
+                              "thresholdsStyle": {
+                                "mode": "off"
+                              }
+                            }
+                          },
+                          "overrides": []
+                        }
+                      }
+                    }
+                  }
+                },
+                "panel-5": {
+                  "kind": "Panel",
+                  "spec": {
+                    "id": 5,
+                    "title": "Taxa de requisições — POST /donations",
+                    "description": "Confirma se há tráfego suficiente no momento do teste (rate() precisa de volume para não ficar ruidoso).",
+                    "links": [],
+                    "data": {
+                      "kind": "QueryGroup",
+                      "spec": {
+                        "queries": [
+                          {
+                            "kind": "PanelQuery",
+                            "spec": {
+                              "query": {
+                                "kind": "DataQuery",
+                                "group": "",
+                                "version": "v0",
+                                "spec": {
+                                  "expr": "sum(rate(http_request_duration_seconds_count{service=\"donation-service\",handler=\"donations\",method=\"POST\"}[5m]))",
+                                  "legendFormat": "req/s"
+                                }
+                              },
+                              "refId": "A",
+                              "hidden": false
+                            }
+                          }
+                        ],
+                        "transformations": [],
+                        "queryOptions": {}
+                      }
+                    },
+                    "vizConfig": {
+                      "kind": "VizConfig",
+                      "group": "timeseries",
+                      "version": "13.2.1",
+                      "spec": {
+                        "options": {
+                          "legend": {
+                            "calcs": [],
+                            "displayMode": "list",
+                            "placement": "bottom",
+                            "showLegend": true
+                          },
+                          "tooltip": {
+                            "hideZeros": false,
+                            "mode": "single",
+                            "sort": "none"
+                          }
+                        },
+                        "fieldConfig": {
+                          "defaults": {
+                            "unit": "reqps",
+                            "thresholds": {
+                              "mode": "absolute",
+                              "steps": [
+                                {
+                                  "value": 0,
+                                  "color": "green"
+                                },
+                                {
+                                  "value": 80,
+                                  "color": "red"
+                                }
+                              ]
+                            },
+                            "color": {
+                              "mode": "palette-classic"
+                            },
+                            "custom": {
+                              "axisBorderShow": false,
+                              "axisCenteredZero": false,
+                              "axisColorMode": "text",
+                              "axisLabel": "",
+                              "axisPlacement": "auto",
+                              "barAlignment": 0,
+                              "barWidthFactor": 0.6,
+                              "drawStyle": "line",
+                              "fillOpacity": 0,
+                              "gradientMode": "none",
+                              "hideFrom": {
+                                "legend": false,
+                                "tooltip": false,
+                                "viz": false
+                              },
+                              "insertNulls": false,
+                              "lineInterpolation": "linear",
+                              "lineWidth": 1,
+                              "pointSize": 5,
+                              "scaleDistribution": {
+                                "type": "linear"
+                              },
+                              "showPoints": "auto",
+                              "showValues": false,
+                              "spanNulls": false,
+                              "stacking": {
+                                "group": "A",
+                                "mode": "none"
+                              },
+                              "thresholdsStyle": {
+                                "mode": "off"
+                              }
+                            }
+                          },
+                          "overrides": []
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 24,
+                        "height": 9,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-1"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 9,
+                        "width": 12,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-2"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 12,
+                        "y": 9,
+                        "width": 4,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-3"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 9,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-4"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 17,
+                        "width": 24,
+                        "height": 7,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-5"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "links": [],
+              "liveNow": false,
+              "preload": false,
+              "tags": [],
+              "timeSettings": {
+                "timezone": "browser",
+                "from": "now-15m",
+                "to": "now",
+                "autoRefresh": "5s",
+                "autoRefreshIntervals": [
+                  "5s",
+                  "10s",
+                  "30s",
+                  "1m",
+                  "5m",
+                  "15m",
+                  "30m",
+                  "1h",
+                  "2h",
+                  "1d"
+                ],
+                "hideTimepicker": false,
+                "fiscalYearStartMonth": 0
+              },
+              "title": "SLO Latência POST /donations (simplificado)",
+              "variables": []
+            }
+          }
+            additionalDataSources:
   - name: Loki
     type: loki
     access: proxy
