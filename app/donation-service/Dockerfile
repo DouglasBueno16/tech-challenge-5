@@ -25,13 +25,24 @@ COPY --from=builder /app/donation-service .
 
 RUN chown -R appuser:appgroup /app
 
-# Variáveis de identificação do Datadog
-ENV DD_SERVICE="donation-service"
-ENV DD_ENV="hackathon"
-ENV DD_VERSION="1.0.0"
+# Variáveis para Datadog APM & AIOps (Watchdog / Applied Intelligence)
+ENV DD_SERVICE="donation-service" \
+    DD_ENV="hackathon" \
+    DD_VERSION="1.0.0" \
+    DD_PROFILING_ENABLED="true" \
+    DD_LOGS_INJECTION="true" \
+    DD_RUNTIME_METRICS_ENABLED="true" \
+    DD_TRACE_PROPAGATION_STYLE="tracecontext,datadog"
+
+# Variáveis para OpenTelemetry (OTel / OTLP) e comunicação com Grafana Alloy
+ENV OTEL_SERVICE_NAME="donation-service" \
+    DD_TRACE_OTLP_ENABLED="true" \
+    OTEL_EXPORTER_OTLP_ENDPOINT="http://alloy.gitops.svc.cluster.local:4318" \
+    OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
 
 USER 1001
 
 EXPOSE 8082
 
 ENTRYPOINT ["/app/donation-service"]
+

@@ -37,6 +37,9 @@ env.bak/
 venv.bak/
 
 # Go
+*.exe
+*.exe~
+*.dll
 *.o
 *.a
 *.so

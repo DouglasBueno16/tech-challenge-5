@@ -24,6 +24,7 @@ import (
 	sqltrace "gopkg.in/DataDog/dd-trace-go.v1/contrib/database/sql"
 	httptrace "gopkg.in/DataDog/dd-trace-go.v1/contrib/net/http"
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 )
 
 // Prometheus Metrics (Golden Metrics: Latency, Traffic, Errors)
@@ -104,9 +105,52 @@ type App struct {
 func main() {
 	_ = godotenv.Load()
 
-	// Inicia Datadog Tracer para APM Tracing
+	serviceName := os.Getenv("DD_SERVICE")
+	if serviceName == "" {
+		serviceName = os.Getenv("OTEL_SERVICE_NAME")
+		if serviceName == "" {
+			serviceName = "donation-service"
+		}
+	}
+	envName := os.Getenv("DD_ENV")
+	if envName == "" {
+		envName = "local"
+	}
+	versionName := os.Getenv("DD_VERSION")
+	if versionName == "" {
+		versionName = "1.0.0"
+	}
+
+	// 1. Inicia Datadog Continuous Profiler para AIOps (Watchdog / Applied Intelligence)
+	// O Watchdog analisa dados contínuos de CPU, Heap, Goroutines e Locks para
+	// detectar anomalias de código, gargalos de memória e contenção automaticamente.
+	err := profiler.Start(
+		profiler.WithService(serviceName),
+		profiler.WithEnv(envName),
+		profiler.WithVersion(versionName),
+		profiler.WithProfileTypes(
+			profiler.CPUProfile,
+			profiler.HeapProfile,
+			profiler.GoroutineProfile,
+			profiler.MutexProfile,
+			profiler.BlockProfile,
+		),
+	)
+	if err != nil {
+		log.Printf("Aviso: Falha ao iniciar Datadog Profiler para AIOps: %v", err)
+	} else {
+		defer profiler.Stop()
+		log.Println("Datadog Continuous Profiler ativado com sucesso para AIOps/Watchdog.")
+	}
+
+	// 2. Inicia Datadog Tracer com Runtime Metrics para APM & AIOps
+	// Runtime Metrics coleta GC pauses, alocações de heap e número de goroutines
+	// que alimentam os algoritmos preditivos de anomalia do Watchdog.
 	tracer.Start(
-		tracer.WithService("donation-service"),
+		tracer.WithService(serviceName),
+		tracer.WithEnv(envName),
+		tracer.WithServiceVersion(versionName),
+		tracer.WithRuntimeMetrics(),
 	)
 	defer tracer.Stop()
 
@@ -129,6 +173,7 @@ func main() {
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 
 	if err := db.Ping(); err != nil {
 		log.Printf("Aviso: Falha ao pingar banco de dados na inicializacao: %v", err)
@@ -203,7 +248,10 @@ func (a *App) LivenessHandler(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if a.DB == nil || a.DB.Ping() != nil {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if a.DB == nil || a.DB.PingContext(ctx) != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"status":"not_ready","database":"disconnected","service":"donation-service"}`))
 		return
@@ -242,6 +290,9 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method == http.MethodPost {
+		// Proteção contra DoS / OOM: limita payload a 1 MB
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 		var d Donation
 		if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -257,7 +308,9 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 
 		d.Status = "APPROVED" // Simulação do gateway de pagamento
 
-		err := a.DB.QueryRow(
+		// QueryRowContext propaga o span pai APM e cancelamento para o driver SQL
+		err := a.DB.QueryRowContext(
+			r.Context(),
 			"INSERT INTO donations (ngo_id, amount, donor_name, status) VALUES ($1, $2, $3, $4) RETURNING id, created_at",
 			d.NgoID, d.Amount, d.DonorName, d.Status,
 		).Scan(&d.ID, &d.CreatedAt)
@@ -284,7 +337,8 @@ func (a *App) DonationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
-		rows, err := a.DB.Query("SELECT id, ngo_id, amount, donor_name, status, created_at FROM donations ORDER BY id DESC LIMIT 100")
+		// QueryContext garante visibilidade no Datadog APM e Watchdog Database Monitoring
+		rows, err := a.DB.QueryContext(r.Context(), "SELECT id, ngo_id, amount, donor_name, status, created_at FROM donations ORDER BY id DESC LIMIT 100")
 		if err != nil {
 			log.Printf("Erro ao consultar doacoes: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
