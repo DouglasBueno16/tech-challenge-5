@@ -1,0 +1,163 @@
+name: Velero backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      acao:
+        description: "O que fazer"
+        type: choice
+        options:
+          - backup
+          - restore
+        default: backup
+      nome:
+        description: "backup: nome a criar (vazio = gerado). restore: nome do backup de origem."
+        required: false
+        default: ""
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER_NAME: clusterpos
+  VELERO_BUCKET: s3-velero-bucket-tech05-backup
+  VELERO_PREFIX: clusterpos
+  VELERO_CLI_VERSION: v1.18.0
+
+jobs:
+  velero:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Adicionando as credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+      - name: Validar acesso ao bucket
+        run: |
+          aws sts get-caller-identity
+          echo probe > /tmp/probe.txt
+          aws s3 cp /tmp/probe.txt "s3://${VELERO_BUCKET}/_probe.txt"
+          aws s3 rm "s3://${VELERO_BUCKET}/_probe.txt"
+
+      - name: Adicionar cluster EKS ao kubeconfig
+        run: aws eks update-kubeconfig --name clusterpos --region us-east-1
+
+      - name: Instalar Velero CLI
+        run: |
+          curl -sSL -o velero.tar.gz \
+            "https://github.com/vmware-tanzu/velero/releases/download/${VELERO_CLI_VERSION}/velero-${VELERO_CLI_VERSION}-linux-amd64.tar.gz"
+          tar -xzf velero.tar.gz
+          sudo mv velero-*-linux-amd64/velero /usr/local/bin/
+          velero version --client-only
+
+      - name: Renovar credenciais do Velero no cluster
+        run: |
+          cat > /tmp/credentials-velero <<EOF
+          [default]
+          aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token=${{ secrets.AWS_SESSION_TOKEN }}
+          EOF
+
+          kubectl -n velero create secret generic velero-aws-credentials \
+            --from-file=cloud=/tmp/credentials-velero \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl -n velero rollout restart deployment/velero daemonset/node-agent
+          kubectl -n velero rollout status deployment/velero --timeout=5m
+          kubectl -n velero rollout status daemonset/node-agent --timeout=5m
+
+      - name: Aguardar BackupStorageLocation
+        run: |
+          for i in $(seq 1 30); do
+            PHASE=$(kubectl -n velero get backupstoragelocation default \
+              -o jsonpath='{.status.phase}' 2>/dev/null || true)
+            echo "tentativa $i: phase=${PHASE:-<vazio>}"
+            [ "$PHASE" = "Available" ] && exit 0
+            sleep 10
+          done
+          echo "::error::BSL nao ficou Available"
+          kubectl -n velero logs deployment/velero --tail=80
+          exit 1
+
+      - name: Criar backup
+        if: inputs.acao == 'backup'
+        id: bkp
+        run: |
+          NAME="${{ inputs.nome }}"
+          [ -z "$NAME" ] && NAME="backup-$(date -u +%Y%m%d-%H%M%S)"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+          velero backup create "$NAME" \
+            --include-namespaces '*' \
+            --exclude-namespaces kube-system,kube-public,kube-node-lease,velero \
+            --default-volumes-to-fs-backup \
+            --snapshot-volumes=false \
+            --ttl 720h \
+            --wait
+
+      - name: Validar backup
+        if: inputs.acao == 'backup'
+        run: |
+          NAME="${{ steps.bkp.outputs.name }}"
+          velero backup describe "$NAME" --details
+
+          PHASE=$(kubectl -n velero get backup "$NAME" -o jsonpath='{.status.phase}')
+          echo "### Backup \`$NAME\` -> **$PHASE**" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "--- objetos no S3 ---"
+          aws s3 ls "s3://${VELERO_BUCKET}/${VELERO_PREFIX}/backups/${NAME}/" --recursive
+
+          # --wait tambem retorna 0 em PartiallyFailed
+          if [ "$PHASE" != "Completed" ]; then
+            velero backup logs "$NAME" | tail -100 || true
+            echo "::error::backup terminou como $PHASE"
+            exit 1
+          fi
+
+      - name: Restaurar backup
+        if: inputs.acao == 'restore'
+        run: |
+          NAME="${{ inputs.nome }}"
+          if [ -z "$NAME" ]; then
+            echo "::error::informe o nome do backup de origem"
+            exit 1
+          fi
+
+          # Num cluster novo o Velero leva ate 1min para sincronizar o bucket
+          for i in $(seq 1 12); do
+            kubectl -n velero get backup "$NAME" >/dev/null 2>&1 && break
+            echo "aguardando sync do backup $NAME..."
+            sleep 10
+          done
+          velero backup get
+
+          velero restore create "restore-$(date -u +%Y%m%d-%H%M%S)" \
+            --from-backup "$NAME" \
+            --wait
+
+          velero restore get
+
+      - name: Salvar evidencias
+        if: always()
+        run: |
+          mkdir -p evidencias
+          kubectl -n velero get backups,restores,backupstoragelocation,podvolumebackups -o yaml \
+            > evidencias/velero-objetos.yaml 2>&1 || true
+          kubectl -n velero logs deployment/velero --tail=500 \
+            > evidencias/velero.log 2>&1 || true
+          aws s3 ls "s3://${VELERO_BUCKET}/${VELERO_PREFIX}/" --recursive \
+            > evidencias/s3-listing.txt 2>&1 || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidencias-velero
+          path: evidencias/

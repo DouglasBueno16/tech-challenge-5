@@ -114,6 +114,31 @@ jobs:
           kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
           kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
           kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
+          
+      - name: Instalar Velero
+        working-directory: ./gitops
+        run: |
+          kubectl create namespace velero --dry-run=client -o yaml | kubectl apply -f -
+
+          cat > /tmp/credentials-velero <<EOF
+          [default]
+          aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws_session_token=${{ secrets.AWS_SESSION_TOKEN }}
+          EOF
+
+          kubectl -n velero create secret generic velero-aws-credentials \
+            --from-file=cloud=/tmp/credentials-velero \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
+          helm repo update
+          helm upgrade --install velero vmware-tanzu/velero \
+            --namespace velero --version 11.4.0 \
+            -f ./velero/values-velero.yaml
+
+          kubectl -n velero rollout status deployment/velero --timeout=5m
+          kubectl -n velero rollout status daemonset/node-agent --timeout=5m
 
   Inserindo-os-dados-no-banco:
     runs-on: ubuntu-latest

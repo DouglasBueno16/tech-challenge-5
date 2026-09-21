@@ -1,0 +1,53 @@
+
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.14.0
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+credentials:
+  useSecret: true
+  existingSecret: velero-aws-credentials
+
+
+snapshotsEnabled: false
+
+deployNodeAgent: true
+
+nodeAgent:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: s3-velero-bucket-tech05-backup
+      prefix: clusterpos
+      default: true
+      config:
+        region: us-east-1
+
+  volumeSnapshotLocation: []
+
+  defaultVolumesToFsBackup: true
+  uploaderType: kopia
+
+  logLevel: info
+
+schedules: {}
