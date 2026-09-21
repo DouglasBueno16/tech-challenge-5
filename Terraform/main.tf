@@ -53,8 +53,4 @@ module "RDS_ngo_db" {
   network = module.Networking.rds_config
 }
 
-module "S3_velero" {
-  source = "./S3"
-}
-
 
