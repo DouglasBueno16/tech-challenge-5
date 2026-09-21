@@ -2,7 +2,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.80"
+      version = "~> 6.0"
     }
   }
 }
@@ -51,10 +51,6 @@ module "RDS_donation_db" {
 module "RDS_ngo_db" {
   source  = "./RDS/ngodb"
   network = module.Networking.rds_config
-}
-
-module "S3_velero" {
-  source = "./S3"
 }
 
 
