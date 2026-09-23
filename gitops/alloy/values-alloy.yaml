@@ -248,7 +248,7 @@ alloy:
       otelcol.exporter.datadog "default" {
         api {
           api_key = sys.env("DD_API_KEY")
-          site    = "us5.datadoghq.com"
+          site    = "datadoghq.com"
         }
 
         // Sem Datadog Agent, evita registrar o pod como "host"
