@@ -2541,7 +2541,7 @@ grafana:
               "variables": []
             }
           }
-            additionalDataSources:
+    additionalDataSources:
   - name: Loki
     type: loki
     access: proxy
