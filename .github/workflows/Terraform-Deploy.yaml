@@ -87,10 +87,11 @@ jobs:
         run: |
           helm repo add grafana https://grafana.github.io/helm-charts
           helm repo update
-          helm install loki grafana/loki \
+          helm upgrade --install loki grafana/loki \
+            --version <versão-do-chart> \
             --create-namespace \
             --namespace loki \
-            -f ./loki/values-loki.yaml
+            -f ./loki/values-loki.yaml \
  
       - name: Adicionar Grafana Alloy
         working-directory: ./gitops
