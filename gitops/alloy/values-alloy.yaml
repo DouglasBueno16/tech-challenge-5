@@ -244,7 +244,7 @@ alloy:
         }
       }
 
-      // Site us5 -> app.us5.datadoghq.com
+      // Site us5 -> datadoghq.com
       otelcol.exporter.datadog "default" {
         api {
           api_key = sys.env("DD_API_KEY")

@@ -26,7 +26,7 @@ services:
     restart: unless-stopped
     environment:
       - DD_API_KEY=${DD_API_KEY}
-      - DD_SITE=${DD_SITE:-us5.datadoghq.com}
+      - DD_SITE=${DD_SITE:-datadoghq.com}
       - DD_APM_ENABLED=true
       - DD_APM_NON_LOCAL_TRAFFIC=true
       - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
