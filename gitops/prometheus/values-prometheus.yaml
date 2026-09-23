@@ -23,7 +23,7 @@ grafana:
         - uid: cfw98x5y7241sc
           type: discord
           settings:
-            url: https://discord.com/api/webhooks/1552432905060352022/PkeEHOkfGUB0nIIfr_W4OEK1id9OMlJs08QEkYGYSQiHRTmIl7zfSBAnM2TJgAgpOKHL
+            url: $DISCORD_WEBHOOK_URL
             use_discord_username: false
             use_embed_description: false
           disableResolveMessage: false
