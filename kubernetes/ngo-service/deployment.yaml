@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: ngo-service
-          image: 498686972093.dkr.ecr.us-east-1.amazonaws.com/tech5/ngo-service:f600574f8fcff02f67684ee16a10c5b6c2b92a9e
+          image: 498686972093.dkr.ecr.us-east-1.amazonaws.com/tech5/ngo-service:eea845bde5439404e0f6a34deddc0e497ad0924f
           imagePullPolicy: Always
           ports:
             - name: http

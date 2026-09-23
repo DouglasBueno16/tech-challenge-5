@@ -28,4 +28,4 @@ ENV DD_VERSION="1.0.0"
 
 EXPOSE 8083
 
-CMD ["ddtrace-run", "python", "app.py"]
+CMD ["opentelemetry-instrument", "gunicorn", "--bind", "0.0.0.0:8083", "--workers", "2", "--threads", "4", "app:app"]
