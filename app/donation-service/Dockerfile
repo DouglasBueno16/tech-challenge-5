@@ -36,7 +36,8 @@ ENV DD_SERVICE="donation-service" \
 
 # Variáveis para OpenTelemetry (OTel / OTLP) e comunicação com Grafana Alloy
 ENV OTEL_SERVICE_NAME="donation-service" \
-    DD_TRACE_OTLP_ENABLED="true" \
+    OTEL_TRACES_EXPORTER="otlp" \
+    DD_TRACE_OTEL_ENABLED="true" \
     OTEL_EXPORTER_OTLP_ENDPOINT="http://alloy.alloy.svc.cluster.local:4318" \
     OTEL_EXPORTER_OTLP_PROTOCOL="http/protobuf"
 
