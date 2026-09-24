@@ -1,13 +1,9 @@
 # Alloy roda como DaemonSet -> uma instância por nó
 controller:
   type: daemonset
-  # tolerations para rodar também em nós com taints (control-plane, etc)
   tolerations:
     - operator: "Exists"
 
-# ---------------------------------------------------------------------------
-# RBAC - necessário para discovery de pods/nós via Kubernetes API
-# ---------------------------------------------------------------------------
 rbac:
   create: true
 
@@ -15,19 +11,13 @@ serviceAccount:
   create: true
 
 alloy:
-  # -------------------------------------------------------------------------
-  # otelcol.exporter.datadog e otelcol.connector.datadog são COMMUNITY
-  # COMPONENTS. Sem essa flag o Alloy falha ao carregar o config.
-  # -------------------------------------------------------------------------
+  # otelcol.exporter.datadog é COMMUNITY COMPONENT.
+  # Sem essa flag o Alloy falha ao carregar o config.
   extraArgs:
     - --feature.community-components.enabled
 
-  # -------------------------------------------------------------------------
-  # Variáveis de ambiente
-  # - DD_API_KEY: vem do Secret datadog-api-key (namespace alloy)
-  # - NODE_NAME:  nome do nó onde o pod roda (usado para evitar que cada pod
-  #               do DaemonSet colete os dados do cluster inteiro)
-  # -------------------------------------------------------------------------
+  # DD_API_KEY: Secret datadog-api-key (namespace alloy)
+  # NODE_NAME: nó onde o pod roda (cada pod coleta só o seu nó)
   extraEnv:
     - name: DD_API_KEY
       valueFrom:
@@ -39,9 +29,7 @@ alloy:
         fieldRef:
           fieldPath: spec.nodeName
 
-  # -------------------------------------------------------------------------
-  # Portas extras no Service para receber traces OTLP das aplicações
-  # -------------------------------------------------------------------------
+  # Portas OTLP para receber traces das aplicações
   extraPorts:
     - name: otlp-grpc
       port: 4317
@@ -52,13 +40,6 @@ alloy:
       targetPort: 4318
       protocol: "TCP"
 
-  # -------------------------------------------------------------------------
-  # hostPath /var/log NÃO é necessário: loki.source.kubernetes lê os logs
-  # pela API do Kubernetes. Se migrar para loki.source.file, descomente:
-  # -------------------------------------------------------------------------
-  # mounts:
-  #   varlog: true
-
   configMap:
     create: true
     content: |-
@@ -66,7 +47,7 @@ alloy:
       // LOGS -> LOKI
       // =======================================================================
 
-      // Descobre apenas os pods do NÓ onde este Alloy está rodando
+      // Descobre apenas os pods do nó onde este Alloy está rodando
       discovery.kubernetes "pods" {
         role = "pod"
 
@@ -76,7 +57,6 @@ alloy:
         }
       }
 
-      // Relabeling para labels úteis no Loki
       discovery.relabel "pod_logs" {
         targets = discovery.kubernetes.pods.targets
 
@@ -106,16 +86,12 @@ alloy:
         }
       }
 
-      // Lê os logs via API do Kubernetes e envia direto ao Loki
-      // (as linhas já chegam sem prefixo CRI, então não precisa de stage.cri)
+      // Lê os logs via API do Kubernetes e envia ao Loki
       loki.source.kubernetes "pod_logs" {
         targets    = discovery.relabel.pod_logs.output
         forward_to = [loki.write.default.receiver]
       }
 
-      // Loki (release: loki | namespace: loki | SingleBinary via gateway nginx)
-      // Se o gateway estiver desabilitado, use:
-      // http://loki.loki.svc.cluster.local:3100/loki/api/v1/push
       loki.write "default" {
         endpoint {
           url = "http://loki-gateway.loki.svc.cluster.local/loki/api/v1/push"
@@ -127,7 +103,6 @@ alloy:
       // METRICAS -> PROMETHEUS
       // =======================================================================
 
-      // Apenas o nó local
       discovery.kubernetes "nodes" {
         role = "node"
 
@@ -137,7 +112,7 @@ alloy:
         }
       }
 
-      // Métricas do kubelet
+      // kubelet
       discovery.relabel "kubelet" {
         targets = discovery.kubernetes.nodes.targets
 
@@ -165,7 +140,7 @@ alloy:
         }
       }
 
-      // cAdvisor (métricas de containers, embutido no kubelet)
+      // cAdvisor (métricas de containers)
       discovery.relabel "cadvisor" {
         targets = discovery.kubernetes.nodes.targets
 
@@ -193,7 +168,7 @@ alloy:
         }
       }
 
-      // Pods com annotation prometheus.io/scrape=true (somente os do nó local)
+      // Pods com annotation prometheus.io/scrape=true (nó local)
       discovery.relabel "annotated_pods" {
         targets = discovery.kubernetes.pods.targets
 
@@ -210,7 +185,6 @@ alloy:
           regex         = "(.+)"
         }
 
-        // Usa a porta da annotation prometheus.io/port
         rule {
           source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
           regex         = "([^:]+)(?::\\d+)?;(\\d+)"
@@ -245,10 +219,7 @@ alloy:
       // =======================================================================
       // TRACES (APM) -> DATADOG via OTLP
       //
-      // Fluxo:
-      //   receiver.otlp -> connector.datadog (gera stats de APM)
-      //                 -> processor.batch -> exporter.datadog
-      //   connector.datadog (métricas) -> processor.batch -> exporter.datadog
+      // Fluxo: receiver.otlp -> processor.batch -> exporter.datadog
       // =======================================================================
 
       otelcol.receiver.otlp "default" {
@@ -261,17 +232,7 @@ alloy:
         }
 
         output {
-          traces = [
-            otelcol.connector.datadog.default.input,
-            otelcol.processor.batch.default.input,
-          ]
-        }
-      }
-
-      // Gera as estatísticas de APM (hits, latência, erros, service map)
-      otelcol.connector.datadog "default" {
-        output {
-          metrics = [otelcol.processor.batch.default.input]
+          traces = [otelcol.processor.batch.default.input]
         }
       }
 
@@ -279,27 +240,23 @@ alloy:
         timeout = "10s"
 
         output {
-          traces  = [otelcol.exporter.datadog.default.input]
-          metrics = [otelcol.exporter.datadog.default.input]
+          traces = [otelcol.exporter.datadog.default.input]
         }
       }
 
-      // Site us5 -> a conta deve ser acessada em app.us5.datadoghq.com
+      // Site us5 -> datadoghq.com
       otelcol.exporter.datadog "default" {
         api {
           api_key = sys.env("DD_API_KEY")
-          site    = "us5.datadoghq.com"
+          site    = "datadoghq.com"
         }
 
-        // Sem Datadog Agent, evita registrar o pod como "host" na infraestrutura
+        // Sem Datadog Agent, evita registrar o pod como "host"
         host_metadata {
           enabled = false
         }
       }
 
-# ---------------------------------------------------------------------------
-# Recursos - ajuste conforme o tamanho do cluster
-# ---------------------------------------------------------------------------
 resources:
   requests:
     cpu: 100m

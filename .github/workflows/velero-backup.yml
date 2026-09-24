@@ -98,7 +98,7 @@ jobs:
           velero backup create "$NAME" \
             --include-namespaces '*' \
             --exclude-namespaces kube-system,kube-public,kube-node-lease,velero \
-            --default-volumes-to-fs-backup \
+            --default-volumes-to-fs-backup=false \
             --snapshot-volumes=false \
             --ttl 720h \
             --wait
@@ -113,7 +113,7 @@ jobs:
           echo "### Backup \`$NAME\` -> **$PHASE**" >> "$GITHUB_STEP_SUMMARY"
 
           echo "--- objetos no S3 ---"
-          aws s3 ls "s3://${VELERO_BUCKET}/${VELERO_PREFIX}/backups/${NAME}/" --recursive
+          aws s3 ls "s3://${VELERO_BUCKET}/${VELERO_PREFIX}/backups/${NAME}/" --recursive || true
 
           # --wait tambem retorna 0 em PartiallyFailed
           if [ "$PHASE" != "Completed" ]; then
