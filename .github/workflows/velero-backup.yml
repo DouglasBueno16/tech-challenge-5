@@ -101,7 +101,6 @@ jobs:
             --default-volumes-to-fs-backup \
             --snapshot-volumes=false \
             --ttl 720h \
-            --wait
 
       - name: Validar backup
         if: inputs.acao == 'backup'
