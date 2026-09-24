@@ -1,13 +1,13 @@
 variable "instance_types" {
   description = "Variavel para troca de tipo de instanca"
   type        = list(string)
-  default     = ["t3.medium"]
+  default     = ["t3a.small"]
 }
 
 variable "lab_role_arn" {
   description = "ARN of the AWS Academy LabRoles"
   type        = string
-  default     = "arn:aws:iam::498686972093:role/LabRole"
+  default     = "arn:aws:iam::359031249197:role/LabRole"
 }
 
 variable "subnets" {
