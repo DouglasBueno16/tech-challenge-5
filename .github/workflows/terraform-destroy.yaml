@@ -1,13 +1,12 @@
-terraform-destroy:
+name: Terraform Destroy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  terraform-destroy:
     name: Terraform Destroy
     runs-on: ubuntu-latest
-    env:
-      TF_VAR_aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      TF_VAR_aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      TF_VAR_aws_session_token: ${{ secrets.AWS_SESSION_TOKEN }}
-    if: github.event_name == 'workflow_dispatch' && inputs.action == 'destroy'
-    environment:
-      name: production-destroy
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,56 +17,32 @@ terraform-destroy:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-east-1
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false
+        uses: hashicorp/setup-terraform@v2
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: v1.30.0
 
-      - name: Terraform init
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="key=togglemaster/fase3/terraform.tfstate" \
-            -backend-config="region=${{ env.AWS_REGION }}" \
-            -backend-config="encrypt=true" \
-            -backend-config="use_lockfile=true"
-
+      - name: Adicionar cluster EKS ao kubeconfig
+        continue-on-error: true
+        run: aws eks update-kubeconfig --name clusterpos --region us-east-1
 
       - name: Limpar Applications do ArgoCD
-        working-directory: ${{ env.WORKING_DIR }}
         continue-on-error: true
         run: |
-          CLUSTER=$(terraform output -raw cluster_name 2>/dev/null || echo "")
-          if [ -n "$CLUSTER" ]; then
-            aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER"
-            echo "Removendo Applications do ArgoCD..."
-            kubectl delete applications --all -n argocd --timeout=120s || true
-            echo "Aguardando 30s para garbage collection..."
-            sleep 30
-          else
-            echo "Cluster não encontrado no state — nada para limpar."
-          fi
+          echo "Removendo Applications do ArgoCD..."
+          kubectl delete applications --all -n argocd --timeout=120s || true
+          echo "Aguardando 30s para garbage collection..."
+          sleep 30
 
-      - name: Gerar terraform.tfvars
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          cat > terraform.tfvars <<EOF
-          aws_region            = "${{ env.AWS_REGION }}"
-          gitops_repo_url       = "${{ github.server_url }}/${{ github.repository }}.git"
-          aws_access_key_id     = "${{ secrets.AWS_ACCESS_KEY_ID }}"
-          aws_secret_access_key = "${{ secrets.AWS_SECRET_ACCESS_KEY }}"
-          aws_session_token     = "${{ secrets.AWS_SESSION_TOKEN }}"
-          EOF
+      - name: Terraform Init
+        working-directory: ./Terraform
+        run: terraform init
 
-      - name: Terraform destroy
-        working-directory: ${{ env.WORKING_DIR }}
+      - name: Terraform Destroy
+        working-directory: ./Terraform
         run: terraform destroy -auto-approve
